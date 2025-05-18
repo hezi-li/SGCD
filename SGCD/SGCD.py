@@ -22,7 +22,8 @@ class SGCD():
         beta = 1,
         theta = 0.1,
         n=3,
-        gamma=0.9
+        gama=0.9,
+        similarity_metric='jsd'
         ):
 
         self.adata = adata.copy()
@@ -35,7 +36,8 @@ class SGCD():
         self.beta = beta
         self.theta = theta
         self.n = n
-        self.gamma = gamma
+        self.gama = gama
+        self.similarity_metric = similarity_metric
         
         fix_seed(self.random_seed)
         
