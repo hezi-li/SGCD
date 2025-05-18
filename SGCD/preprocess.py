@@ -21,37 +21,62 @@ def permutation(feature):
     return feature_permutated 
 
 
-def construct_interaction(adata, n_neighbors=3, alpha=0.9):
-   position = adata.obsm['spatial']
-   cell_prop = adata.obsm['cell_type']
-   
-   distance_matrix = ot.dist(position, position, metric='euclidean')
-   n_spot = distance_matrix.shape[0]
-   
-   interaction = np.zeros([n_spot, n_spot])  
-   for i in range(n_spot):
-       vec = distance_matrix[i, :]
-       distance = vec.argsort()
-       for t in range(1, n_neighbors + 1):
-           y = distance[t]
-           interaction[i, y] = 1
-           
-   adj = interaction + interaction.T
-   adj = np.where(adj>1, 1, adj)
-   
-   mask = (adj > 0)
-   weighted_adj = adj.copy()
-   
-   for i, j in zip(*np.where(mask)):
-       p1 = cell_prop[i] + 1e-10 
-       p2 = cell_prop[j] + 1e-10
-       m = (p1 + p2) / 2
-       js = 0.5 * np.sum(p1 * np.log(p1/m)) + 0.5 * np.sum(p2 * np.log(p2/m))
-       sim = 1 / (1 + js)
-       weighted_adj[i,j] = alpha + (1-alpha) * sim
+def construct_interaction(adata, n_neighbors=4, alpha=0.2, similarity_metric='jsd'):
 
-   adata.obsm['graph_neigh'] = interaction
-   adata.obsm['adj'] = weighted_adj
+    position = adata.obsm['spatial']
+    cell_prop = adata.obsm['cell_type']
+    
+    distance_matrix = ot.dist(position, position, metric='euclidean')
+    n_spot = distance_matrix.shape[0]
+    
+    interaction = np.zeros([n_spot, n_spot])  
+    for i in range(n_spot):
+        vec = distance_matrix[i, :]
+        distance = vec.argsort()
+        for t in range(1, n_neighbors + 1):
+            y = distance[t]
+            interaction[i, y] = 1
+            
+    adj = interaction + interaction.T
+    adj = np.where(adj>1, 1, adj)
+    
+    mask = (adj > 0)
+    weighted_adj = adj.copy()
+    
+    for i, j in zip(*np.where(mask)):
+        p1 = cell_prop[i] + 1e-10 
+        p2 = cell_prop[j] + 1e-10
+        
+        if similarity_metric == 'jsd':
+            # Jensen-Shannon散度
+            m = (p1 + p2) / 2
+            js = 0.5 * np.sum(p1 * np.log(p1/m)) + 0.5 * np.sum(p2 * np.log(p2/m))
+            sim = 1 / (1 + js)
+        
+        elif similarity_metric == 'cosine':
+            # 余弦相似度
+            norm_p1 = np.linalg.norm(p1)
+            norm_p2 = np.linalg.norm(p2)
+            sim = np.dot(p1, p2) / (norm_p1 * norm_p2)
+        
+        elif similarity_metric == 'pearson':
+            # pcc
+            mean_p1 = np.mean(p1)
+            mean_p2 = np.mean(p2)
+            numerator = np.sum((p1 - mean_p1) * (p2 - mean_p2))
+            denominator = np.sqrt(np.sum((p1 - mean_p1)**2) * np.sum((p2 - mean_p2)**2))
+            sim = numerator / denominator
+
+            sim = (sim + 1) / 2
+        
+        else:
+            raise ValueError("不支持的相似度度量方法。可选值: 'jsd', 'cosine', 'pearson'")
+            
+        weighted_adj[i,j] = alpha + (1-alpha) * sim
+ 
+    adata.obsm['graph_neigh'] = interaction
+    adata.obsm['adj'] = weighted_adj
+
     
 
 def construct_interaction_KNN(adata, n_neighbors=10):
